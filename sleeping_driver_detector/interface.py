@@ -1,35 +1,47 @@
-import cv2
 import tkinter
 import camera as cam
+import detector
+import threading
+import cv2
 from PIL import Image, ImageTk
 from tkinter import ttk
+from utils import draw_boxes
 
-
-class App(tkinter.Frame):
-    def __init__(self) -> None:
-        self.camera = cam.Camera()
-        self.window = tkinter.Tk()
-        self.window.wm_title("Sleeping Driver Detector")
+class App():
+    def __init__(self, window : tkinter.Tk, weight_path, input_height, input_width) -> None:
+        self.window = window
+        self.window.title("Sleeping Driver Detector")
         self.window.config(background="#FFFFFF")
-        self.img_frame = ttk.Frame(self.window, width=600, height=500)
+        
+        self.camera = cam.Camera().start()
+        self.detector = detector.Detector(weight_path, input_height, input_width, self.camera).start()
+
+        # Display Canvas
+        self.img_frame = ttk.Frame(self.window, width=self.camera.width, height=self.camera.height)
         self.img_frame.grid(row=0, column=0, padx=10, pady=2)
         self.display = ttk.Label(self.img_frame)
         self.display.grid(row=0, column=0)
 
-    def _read_to_imgtk(self):
-        frame = self.camera.read()
-        frame = cv2.flip(frame, 1)
-        img = cv2.cvtColor(frame, cv2.COLOR_BGR2RGBA)
-        img = Image.fromarray(img)
-        imgtk = ImageTk.PhotoImage(image=img)
-        return imgtk
+        # Initiate
+        self.delay = 5
 
-    def _stream_camera(self):
-        imgtk = self._read_to_imgtk()
-        self.display.imgtk = imgtk
-        self.display.configure(image=imgtk)
-        self.display.after(10, self._stream_camera)
-    
+
+    def _print_to_canvas(self):
+        if self.camera.frame is not None:
+            img = cv2.cvtColor(self.camera.frame, cv2.COLOR_BGR2RGBA)
+            if self.detector.results is not None:
+                img = draw_boxes(img, self.detector.results, self.detector.input_width, self.detector.input_height)
+            img = Image.fromarray(img)
+            imgtk = ImageTk.PhotoImage(image=img)
+            self.display.imgtk = imgtk
+            self.display.configure(image=imgtk)
+
+    def update(self):
+        self._print_to_canvas()
+        self.window.after(self.delay, self.update)
+
     def start(self):
-        self._stream_camera()
+        self.update()
         self.window.mainloop()
+        self.detector.stop()
+        self.camera.stop()
