@@ -1,38 +1,37 @@
 import cv2 as cv
+import numpy as np
 import threading
 import camera
-import tensorflow as tf
+import torch
+import onnxruntime as rt
 
 class Detector:
-    def __init__(self, weight_path: str, input_width: int, input_height: int, camera: camera.Camera) -> None:
-        self.model = tf.saved_model.load(weight_path)
+    def __init__(self, weight_path: str, camera: camera.Camera) -> None:
+        self.net = cv.dnn.readNetFromONNX(weight_path)
         # self.label_map = pd.read_csv(label_path, sep=';', index_col='ID')
-        self.input_width = input_width 
-        self.input_height = input_height
         self.camera = camera
+        self.input_width = camera.width 
+        self.input_height = camera.height
         self.results = None
         self.stopped = False
         pass
 
-    def _convert_cvframe_into_tensor(self, frame):
-        #Resize to respect the input_shape
-        inp = cv.resize(frame, (self.input_width , self.input_height))
-        #Convert img to RGB
-        rgb = cv.cvtColor(inp, cv.COLOR_BGR2RGB)
-        rgb_tensor = tf.convert_to_tensor(rgb, dtype=tf.uint8)
-        rgb_tensor = tf.expand_dims(rgb_tensor , 0)
-        return rgb_tensor
+    def _convert_cvframe_into_nparray(self, frame):
+        # frame = cv.resize(frame, dsize=(640, 640), interpolation=cv.INTER_AREA)
+        # frame = frame[:, :, ::-1].transpose(2, 0, 1)
+        # frame = np.expand_dims(frame, axis=0)
+        # frame = frame.astype(np.float32) / 255.0
+        blob = cv.dnn.blobFromImage(frame, 1/255 , (640, 640), swapRB=True, mean=(0,0,0), crop= False)
+        return blob
     
     def _detect(self):
         while not self.stopped:
             if self.camera.frame is not None:
-                tensor = self._convert_cvframe_into_tensor(self.camera.frame)
-                results = self.model(tensor)
-                scores = results.get("detection_scores")
-                boxes = results.get("detection_boxes")
-                classes = results.get("detection_classes")
-                num_detections = results.get("num_detections")
-                self.results = (boxes, scores, classes, num_detections)
+                tensor = self._convert_cvframe_into_nparray(self.camera.frame)
+                self.net.setInput(tensor)
+                outputs= self.net.forward(self.net.getUnconnectedOutLayersNames())
+                self.results = outputs
+
 
     def start(self):
         threading.Thread(target=self._detect, args=()).start()

@@ -8,13 +8,13 @@ from tkinter import ttk
 from utils import draw_boxes
 
 class App():
-    def __init__(self, window : tkinter.Tk, weight_path, input_height, input_width) -> None:
+    def __init__(self, window : tkinter.Tk, weight_path) -> None:
         self.window = window
         self.window.title("Sleeping Driver Detector")
         self.window.config(background="#FFFFFF")
         
         self.camera = cam.Camera().start()
-        self.detector = detector.Detector(weight_path, input_height, input_width, self.camera).start()
+        self.detector = detector.Detector(weight_path, self.camera).start()
 
         # Display Canvas
         self.img_frame = ttk.Frame(self.window, width=self.camera.width, height=self.camera.height)
